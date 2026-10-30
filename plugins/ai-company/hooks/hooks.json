@@ -1,0 +1,17 @@
+{
+  "description": "AI company safety rules: blocks deletes, git history changes, GitHub access, secret reads and out-of-scope writes by the team's agents. Your own session is not affected.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/guard.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

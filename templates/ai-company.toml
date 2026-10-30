@@ -1,0 +1,24 @@
+# Optional per-repository settings for the AI company team.
+# Put this file at the repository root as `ai-company.toml`. Every value is
+# optional; environment variables (AI_COMPANY_*) override them.
+# Secrets never go in this file.
+
+# test_command = "npm test"            # what the orchestrator runs after the developer
+# base_branch = "main"
+# owner_login = ""                     # default: the repository owner
+# allowed_triggerers = []              # default: only the owner
+# max_review_rounds = 2
+# auth_mode = "auto"                   # "auto", "subscription" or "api"
+# api_fallback_on_limit = false        # true: switch to the API key when the subscription limit is hit
+
+# Models per role. On a Pro plan, lighter models for the planning roles make
+# the usage limit last longer.
+# [manager]
+# model = "claude-sonnet-5-5"
+# [designer]
+# model = "claude-sonnet-5-5"
+# [developer]
+# model = "claude-opus-5-5"
+# effort = "xhigh"
+# [reviewer]
+# model = "claude-sonnet-5-5"

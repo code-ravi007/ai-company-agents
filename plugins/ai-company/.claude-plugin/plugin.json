@@ -1,0 +1,13 @@
+{
+  "name": "ai-company",
+  "displayName": "AI Company",
+  "version": "1.0.0",
+  "description": "A product team of four agents (Manager, Designer, Developer, Reviewer) plus the skills they use. Works in any project.",
+  "author": {
+    "name": "Ravi Kumar",
+    "url": "https://github.com/ravikumar1002"
+  },
+  "repository": "https://github.com/ravikumar1002/ai-company-agents",
+  "license": "MIT",
+  "keywords": ["agents", "product-management", "ux", "development", "code-review", "testing"]
+}

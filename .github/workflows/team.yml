@@ -1,0 +1,108 @@
+name: AI company team
+
+# Reusable workflow. Any repository turns the team on with a small caller
+# workflow (see templates/ai-company.yml):
+#
+#   jobs:
+#     team:
+#       uses: ravikumar1002/ai-company-agents/.github/workflows/team.yml@main
+#       secrets: inherit
+#
+# Triggers handled (they come from the caller's `on:` block):
+#   - `ai:build` label added to an issue
+#   - `/ai build` comment on an issue, `/ai revise` comment or review on a team PR
+#   - workflow_dispatch with an idea or an issue number
+#   - schedule: resume runs paused by the usage limit
+
+on:
+  workflow_call:
+    inputs:
+      tool_repository:
+        description: "Where the team's code lives"
+        type: string
+        default: ravikumar1002/ai-company-agents
+      tool_ref:
+        description: "Version of the team to run (tag or branch)"
+        type: string
+        default: main
+      python_version:
+        type: string
+        default: "3.12"
+      node_version:
+        type: string
+        default: "20"
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN:
+        description: "Claude subscription token from `claude setup-token` (preferred)"
+        required: false
+      ANTHROPIC_API_KEY:
+        description: "Claude API key (optional, or as a fallback)"
+        required: false
+      AI_COMPANY_GITHUB_TOKEN:
+        description: "Token of the bot account that commits and opens PRs"
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-company-${{ github.repository }}-${{ github.event.issue.number || github.event.pull_request.number || github.event_name }}
+  cancel-in-progress: false
+
+jobs:
+  run:
+    # Cheap filters so unrelated events never start the job. The CLI checks
+    # again that the sender is allowed to trigger the team.
+    if: >-
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issues' && github.event.label.name == 'ai:build') ||
+      (github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/ai ')) ||
+      (github.event_name == 'pull_request_review' && startsWith(github.event.review.body, '/ai revise'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - name: Get the team
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.tool_repository }}
+          ref: ${{ inputs.tool_ref }}
+          path: _ai_company_tool
+          persist-credentials: false
+
+      - name: Move the team out of the project checkout
+        run: mv _ai_company_tool "$RUNNER_TEMP/ai-company"
+
+      - name: Check out the project
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # The orchestrator passes the token to git per command, so it is
+          # never stored in .git/config where an agent could read it.
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node_version }}
+
+      - name: Install the team
+        run: |
+          python -m pip install --upgrade pip
+          pip install "$RUNNER_TEMP/ai-company"
+
+      - name: Run the team
+        run: ai-company event
+        env:
+          AI_COMPANY_PLUGIN_DIR: ${{ runner.temp }}/ai-company/plugins/ai-company
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          AI_COMPANY_GITHUB_TOKEN: ${{ secrets.AI_COMPANY_GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          AI_COMPANY_OWNER_LOGIN: ${{ vars.AI_COMPANY_OWNER_LOGIN }}
+          AI_COMPANY_ALLOWED_TRIGGERERS: ${{ vars.AI_COMPANY_ALLOWED_TRIGGERERS }}
+          AI_COMPANY_API_FALLBACK_ON_LIMIT: ${{ vars.AI_COMPANY_API_FALLBACK_ON_LIMIT }}
