@@ -13,7 +13,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8"]
+dev = ["pytest>=8", "pyyaml>=6"]
 
 [project.scripts]
 ai-company = "ai_company.cli:main"

@@ -35,9 +35,10 @@ jobs:
     secrets: inherit
 ```
 
-3. Optionally create `ai-company.toml` at the repository root with the project's test command, for example `test_command = "npm test"`. Everything else has sensible defaults.
-4. Do not commit. Show the user the two files and tell them to:
+3. If the user also wants Claude to review every pull request, copy `templates/claude-review.yml` from https://github.com/code-ravi007/ai-company-agents to `.github/workflows/claude-review.yml` (it needs the same `CLAUDE_CODE_OAUTH_TOKEN` secret and the Claude GitHub App installed on the repository).
+4. Optionally create `ai-company.toml` at the repository root with the project's test command, for example `test_command = "npm test"`. Everything else has sensible defaults.
+5. Do not commit. Show the user the files and tell them to:
    - commit them (or let you commit on a branch and open a PR, if they ask),
    - add the repository secrets `CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`) and `AI_COMPANY_GITHUB_TOKEN` (a token for the GitHub account the team works as) under Settings → Secrets and variables → Actions, or run `scripts/enable-repo.sh owner/repo` from the ai-company-agents checkout, which does all of this in one go,
    - if the repository belongs to a different account than the one the team works as, add that account as a collaborator with Write access.
-5. Never ask the user to paste a token into the chat.
+6. Never ask the user to paste a token into the chat.

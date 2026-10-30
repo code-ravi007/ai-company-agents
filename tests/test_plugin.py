@@ -110,3 +110,17 @@ def test_structured_output_tool_is_allowed_for_every_role(tmp_path):
 
     for policy in role_policies().values():
         assert Guardrails(repo_root=tmp_path, policy=policy).check("StructuredOutput", {"title": "x"}).allowed
+
+
+def test_claude_review_template():
+    import yaml
+
+    template = (ROOT / "templates" / "claude-review.yml").read_text()
+    assert template == (ROOT / ".github" / "workflows" / "claude-review.yml").read_text()
+    workflow = yaml.safe_load(template)
+    for job in workflow["jobs"].values():
+        assert job["permissions"]["contents"] == "read"  # comments only, never pushes
+        step = job["steps"][-1]
+        assert step["uses"] == "anthropics/claude-code-action@v1"
+        assert step["with"]["claude_code_oauth_token"] == "${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}"
+    assert "claude-review.yml" in (ROOT / "scripts" / "enable-repo.sh").read_text()

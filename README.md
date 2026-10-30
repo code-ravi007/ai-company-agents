@@ -30,7 +30,7 @@ plugins/ai-company/                 the Claude Code plugin
   hooks/hooks.json, scripts/guard.py  safety rules for the team's agents
 ai_company/                         the GitHub orchestrator (Python, Claude Agent SDK)
 .github/workflows/team.yml          reusable workflow any repo can call
-templates/                          the 20-line workflow and optional config for a repo
+templates/                          the workflows (team + Claude PR review) and optional config for a repo
 scripts/enable-repo.sh              turn the team on for one repo, several, or all of yours
 ```
 
@@ -74,6 +74,7 @@ The script stores the secrets, creates the `ai:build` label and opens a PR that 
 | Comment `/ai build` on an issue | Same, e.g. after answering the Manager's questions |
 | Leave review comments on the PR, then comment `/ai revise` | Addresses them, re-reviews, pushes |
 | Actions → *AI company* → *Run workflow* with an idea | Opens an issue for the idea and builds it |
+| Open any pull request, or comment `@claude <question>` | Claude reviews it with inline comments, or answers (`claude-review.yml`) |
 
 Each issue gets one status comment the team keeps up to date, plus labels (`ai:in-progress`, `ai:needs-info`, `ai:paused`, `ai:pr-open`, `ai:failed`). See [docs/SETUP.md](docs/SETUP.md) for the one-time setup (a GitHub token and a Claude token).
 

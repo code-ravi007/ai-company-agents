@@ -10,7 +10,8 @@
 #      as a collaborator (and accepts the invite with the bot token),
 #   2. stores the secrets the team needs,
 #   3. creates the ai:build label,
-#   4. opens a pull request that adds .github/workflows/ai-company.yml.
+#   4. opens a pull request that adds .github/workflows/ai-company.yml and
+#      .github/workflows/claude-review.yml (Claude reviews every new PR).
 #
 # Secrets are read from these environment variables, or asked for without
 # echoing if unset. They are passed to `gh secret set` on stdin and never
@@ -30,6 +31,7 @@ BOT="${AI_COMPANY_BOT:-code-ravi007}"
 REF="${AI_COMPANY_REF:-main}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TEMPLATE="$HERE/templates/ai-company.yml"
+REVIEW_TEMPLATE="$HERE/templates/claude-review.yml"
 BRANCH="ai-company-setup"
 
 say() { printf '\033[1m%s\033[0m\n' "$*"; }
@@ -92,23 +94,37 @@ ensure_label() {
     && echo "  created label ai:build" || echo "  label ai:build already exists"
 }
 
-open_workflow_pr() {
-  local repo="$1" base sha content
-  if gh api "repos/$repo/contents/.github/workflows/ai-company.yml" >/dev/null 2>&1; then
-    echo "  workflow already present; left unchanged"
-    return 0
+add_workflow_file() {
+  local repo="$1" name="$2" source="$3" content
+  if gh api "repos/$repo/contents/.github/workflows/$name?ref=$BRANCH" >/dev/null 2>&1; then
+    echo "  $name already present; left unchanged"
+    return 1
   fi
+  content="$(sed "s#team.yml@main#team.yml@$REF#" "$source" | base64 | tr -d '\n')"
+  gh api -X PUT "repos/$repo/contents/.github/workflows/$name" \
+    -f message="Add $name" -f content="$content" -f branch="$BRANCH" >/dev/null
+  echo "  added $name"
+}
+
+open_workflow_pr() {
+  local repo="$1" base sha added=0
   base="$(gh api "repos/$repo" -q .default_branch)"
   sha="$(gh api "repos/$repo/git/ref/heads/$base" -q .object.sha)"
   if ! gh api "repos/$repo/git/ref/heads/$BRANCH" >/dev/null 2>&1; then
     gh api -X POST "repos/$repo/git/refs" -f ref="refs/heads/$BRANCH" -f sha="$sha" >/dev/null
   fi
-  content="$(sed "s#team.yml@main#team.yml@$REF#" "$TEMPLATE" | base64 | tr -d '\n')"
-  gh api -X PUT "repos/$repo/contents/.github/workflows/ai-company.yml" \
-    -f message="Turn on the AI company team" -f content="$content" -f branch="$BRANCH" >/dev/null
+  add_workflow_file "$repo" ai-company.yml "$TEMPLATE" && added=1
+  add_workflow_file "$repo" claude-review.yml "$REVIEW_TEMPLATE" && added=1
+  if [[ "$added" == 0 ]]; then
+    return 0
+  fi
+  if gh pr list --repo "$repo" --head "$BRANCH" --state open --json number -q '.[].number' | grep -q .; then
+    echo "  updated the open setup pull request"
+    return 0
+  fi
   gh pr create --repo "$repo" --base "$base" --head "$BRANCH" \
     --title "Turn on the AI company team" \
-    --body "Adds the AI company workflow. After merging, label an issue \`ai:build\` and the team opens a pull request for it. See https://github.com/code-ravi007/ai-company-agents for details." \
+    --body "Adds the AI company workflow and Claude PR review. After merging, label an issue \`ai:build\` and the team opens a pull request for it; Claude also reviews every new pull request and answers \`@claude\` comments. See https://github.com/code-ravi007/ai-company-agents for details." \
     | sed 's/^/  opened /'
 }
 

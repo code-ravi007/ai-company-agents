@@ -50,15 +50,25 @@ It asks for the two tokens without echoing them (or reads `CLAUDE_CODE_OAUTH_TOK
 
 1. stores the secrets `CLAUDE_CODE_OAUTH_TOKEN` and `AI_COMPANY_GITHUB_TOKEN` (and `ANTHROPIC_API_KEY` if you give one),
 2. creates the `ai:build` label,
-3. opens a PR adding `.github/workflows/ai-company.yml`.
+3. opens a PR adding `.github/workflows/ai-company.yml` and `.github/workflows/claude-review.yml`.
 
 Merge that PR and the team is live in that repository. Personal GitHub accounts have no account-wide secrets, so each repository stores its own copy; the script does that for you. (With a GitHub organization you could store the secrets once at organization level instead.)
 
-**Manual alternative:** copy [templates/ai-company.yml](../templates/ai-company.yml) to `.github/workflows/ai-company.yml` and add the secrets under **Settings → Secrets and variables → Actions**. Inside Claude Code, `/ai-company:enable-github-automation` prepares the files for you.
+**Manual alternative:** copy [templates/ai-company.yml](../templates/ai-company.yml) and [templates/claude-review.yml](../templates/claude-review.yml) to `.github/workflows/` and add the secrets under **Settings → Secrets and variables → Actions**. Inside Claude Code, `/ai-company:enable-github-automation` prepares the files for you.
 
 ### Repositories owned by another account
 
 If a repository belongs to a different account, set `AI_COMPANY_BOT=code-ravi007` and run the script signed in as that repository's owner: it then also invites `code-ravi007` as a collaborator and accepts the invite. Fine-grained tokens can't reach another personal account's repositories, so in that case the token must be a classic token with only the `repo` scope.
+
+### Claude PR review
+
+`claude-review.yml` uses Anthropic's [Claude Code Action](https://github.com/anthropics/claude-code-action) with the same `CLAUDE_CODE_OAUTH_TOKEN`:
+
+- Every new pull request (not drafts) gets a review: inline comments on real problems and a short summary saying whether it looks ready to merge.
+- Comment `@claude <question>` on a pull request or issue to ask something, for example `@claude review again` after new commits.
+- It only comments; it never pushes code or approves. Only people with write access to the repository can trigger it.
+- Comments come from the Claude GitHub App (`claude[bot]`), which must be installed on the repository: https://github.com/apps/claude.
+- Each review uses your Claude usage. To review every push too, add `synchronize` to the `pull_request` types.
 
 ### Optional per-repository settings
 
