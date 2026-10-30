@@ -19,5 +19,5 @@ on:
 
 jobs:
   team:
-    uses: ravikumar1002/ai-company-agents/.github/workflows/team.yml@main
+    uses: code-ravi007/ai-company-agents/.github/workflows/team.yml@main
     secrets: inherit

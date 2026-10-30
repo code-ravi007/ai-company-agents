@@ -281,8 +281,10 @@ class Pipeline:
         else:
             pr = self.github.create_pr(state.branch, self.config.base_branch, title, body, draft=not approved)
         state.pr_number, state.pr_url = pr["number"], pr["html_url"]
-        self.github.assign(pr["number"], self.config.owner_login)
-        self.github.request_review(pr["number"], self.config.owner_login)
+        if self.config.owner_login != self.config.git_author_name:
+            # GitHub refuses a review request from a PR's own author.
+            self.github.assign(pr["number"], self.config.owner_login)
+            self.github.request_review(pr["number"], self.config.owner_login)
         if state.issue:
             self._set_label(state, "ai:pr-open")
             self.github.comment(state.issue, render.done_comment(state, self.config))
@@ -319,7 +321,8 @@ class Pipeline:
                 self.git.push(branch)
             self.github.update_pr(pr_number, render.pr_body(state, self.config))
             self.github.comment(pr_number, render.revision_comment(state))
-            self.github.request_review(pr_number, self.config.owner_login)
+            if self.config.owner_login != self.config.git_author_name:
+                self.github.request_review(pr_number, self.config.owner_login)
         except UsageLimitPause as pause:
             self._checkpoint_branch(state, f"wip: address review on #{pr_number}")
             self.github.comment(

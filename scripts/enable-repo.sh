@@ -6,8 +6,8 @@
 #
 # Run it from your own computer, signed in to the GitHub CLI as the repository
 # owner (gh auth login; gh auth refresh -s workflow). For each repository it:
-#   1. invites the bot account as a collaborator with Write access
-#      (and accepts the invite if the bot token is available),
+#   1. if the repository belongs to another account, invites the bot account
+#      as a collaborator (and accepts the invite with the bot token),
 #   2. stores the secrets the team needs,
 #   3. creates the ai:build label,
 #   4. opens a pull request that adds .github/workflows/ai-company.yml.
@@ -16,7 +16,7 @@
 # echoing if unset. They are passed to `gh secret set` on stdin and never
 # printed or written to disk:
 #   CLAUDE_CODE_OAUTH_TOKEN   from `claude setup-token` (or leave empty and set ANTHROPIC_API_KEY)
-#   AI_COMPANY_GITHUB_TOKEN   the bot account's classic token with the `repo` scope
+#   AI_COMPANY_GITHUB_TOKEN   token of the account the team works as (see docs/SETUP.md)
 #   ANTHROPIC_API_KEY         optional
 #
 # Options (environment): AI_COMPANY_BOT=code-ravi007, AI_COMPANY_REF=main
@@ -63,6 +63,9 @@ set_secret() {
 
 invite_bot() {
   local repo="$1"
+  if [[ "${repo%%/*}" == "$BOT" ]]; then
+    return 0  # the bot owns this repository; nothing to invite
+  fi
   if gh api "repos/$repo/collaborators/$BOT" >/dev/null 2>&1; then
     echo "  $BOT is already a collaborator"
     return 0
@@ -105,7 +108,7 @@ open_workflow_pr() {
     -f message="Turn on the AI company team" -f content="$content" -f branch="$BRANCH" >/dev/null
   gh pr create --repo "$repo" --base "$base" --head "$BRANCH" \
     --title "Turn on the AI company team" \
-    --body "Adds the AI company workflow. After merging, label an issue \`ai:build\` and the team opens a pull request for it. See https://github.com/ravikumar1002/ai-company-agents for details." \
+    --body "Adds the AI company workflow. After merging, label an issue \`ai:build\` and the team opens a pull request for it. See https://github.com/code-ravi007/ai-company-agents for details." \
     | sed 's/^/  opened /'
 }
 

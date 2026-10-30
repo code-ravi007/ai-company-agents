@@ -58,7 +58,7 @@ def repo(tmp_path: Path) -> Path:
 @pytest.fixture
 def config(repo: Path) -> Config:
     fast = RoleSettings(max_turns=1, max_budget_usd=0.1)
-    return Config(repo_root=repo, owner_login="ravikumar1002", manager=fast, designer=fast, developer=fast, reviewer=fast)
+    return Config(repo_root=repo, owner_login="code-ravi007", manager=fast, designer=fast, developer=fast, reviewer=fast)
 
 
 @pytest.fixture

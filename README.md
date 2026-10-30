@@ -15,7 +15,7 @@ idea ─▶ Manager ─spec─▶ Designer ─design─▶ Developer ◀─feedb
                                                └────────diff────────┘
                                                        │ approved
                                                        ▼
-                                  you (locally) or the bot (on GitHub) opens a PR; you merge
+                                  you (locally) or the team (on GitHub) opens a PR; you merge
 ```
 
 ## What's inside
@@ -41,7 +41,7 @@ The orchestrator on GitHub loads the same agent files and skills as the plugin, 
 In Claude Code:
 
 ```
-/plugin marketplace add ravikumar1002/ai-company-agents
+/plugin marketplace add code-ravi007/ai-company-agents
 /plugin install ai-company@ai-company-agents
 ```
 
@@ -62,11 +62,11 @@ Claude Code's normal permission prompts still apply: you approve shell commands 
 Once per repository (or for all of them at once):
 
 ```bash
-git clone https://github.com/ravikumar1002/ai-company-agents && cd ai-company-agents
-scripts/enable-repo.sh ravikumar1002/my-app        # or: scripts/enable-repo.sh --all
+git clone https://github.com/code-ravi007/ai-company-agents && cd ai-company-agents
+scripts/enable-repo.sh code-ravi007/my-app        # or: scripts/enable-repo.sh --all
 ```
 
-The script invites the bot account, stores the secrets, creates the `ai:build` label and opens a PR that adds a 20-line workflow. Merge it, then:
+The script stores the secrets, creates the `ai:build` label and opens a PR that adds a 20-line workflow. Merge it, then:
 
 | You do | The team does |
 |---|---|
@@ -75,7 +75,7 @@ The script invites the bot account, stores the secrets, creates the `ai:build` l
 | Leave review comments on the PR, then comment `/ai revise` | Addresses them, re-reviews, pushes |
 | Actions → *AI company* → *Run workflow* with an idea | Opens an issue for the idea and builds it |
 
-Each issue gets one status comment the team keeps up to date, plus labels (`ai:in-progress`, `ai:needs-info`, `ai:paused`, `ai:pr-open`, `ai:failed`). See [docs/SETUP.md](docs/SETUP.md) for the one-time setup (bot token, Claude token).
+Each issue gets one status comment the team keeps up to date, plus labels (`ai:in-progress`, `ai:needs-info`, `ai:paused`, `ai:pr-open`, `ai:failed`). See [docs/SETUP.md](docs/SETUP.md) for the one-time setup (a GitHub token and a Claude token).
 
 ## Claude subscription or API key
 

@@ -99,7 +99,7 @@ def test_github_flow_opens_pr_and_tracks_status(config, make_git, repo):
     pr = gh.prs[0]
     assert pr["draft"] is False
     assert "Closes #7" in pr["body"]
-    assert gh.review_requests == [(pr["number"], "ravikumar1002")]
+    assert gh.review_requests == [(pr["number"], "code-ravi007")]
     assert gh.labels[7] == {"ai:pr-open"}
     # Branch was pushed to origin.
     assert "ai/7-greeting-page" in git(repo, "ls-remote", "--heads", "origin")

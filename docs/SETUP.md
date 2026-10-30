@@ -5,7 +5,7 @@
 Nothing to configure. In Claude Code:
 
 ```
-/plugin marketplace add ravikumar1002/ai-company-agents
+/plugin marketplace add code-ravi007/ai-company-agents
 /plugin install ai-company@ai-company-agents
 ```
 
@@ -15,19 +15,17 @@ The plugin uses whatever Claude login Claude Code already has (your Pro subscrip
 
 You do steps 1 and 2 once. Step 3 is one command per repository, or one command for all of them.
 
-### 1. The bot account's token (signed in as the bot, e.g. `code-ravi007`)
+### 1. A GitHub token for the account the team works as
 
-The bot works in repositories owned by your main account as a collaborator. Fine-grained tokens can only target repositories owned by the token's own account or an organization, so this needs a **classic** token:
+Everything runs under one GitHub account, `code-ravi007`: it owns the repositories, and the team commits and opens pull requests as it. (Working in repositories owned by a different account also works; see "Repositories owned by another account" below.)
 
-**Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token (classic)**
+Signed in as `code-ravi007`: **Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token**
 
-- Note: `ai-company`
-- Expiration: 90 days or more (set a reminder to renew)
-- Scopes: **`repo`** only. Leave `workflow`, `admin:*`, `delete_repo` and everything else unticked.
+- Name: `ai-company`; expiration: 90 days or more (set a reminder to renew)
+- Repository access: **All repositories** (or only the ones you want the team in)
+- Repository permissions: **Contents**, **Issues** and **Pull requests**: Read and write. **Metadata**: Read. Nothing else; in particular no Administration and no Workflows.
 
 Copy the token. Don't paste it into chat or any file.
-
-The token can reach every repository the bot is a collaborator on, and only those, so only invite the bot where you want the team.
 
 ### 2. Your Claude token (on your own computer)
 
@@ -40,24 +38,27 @@ It opens the browser, you approve, and it prints a token valid for one year. Cop
 ### 3. Turn the team on for repositories
 
 ```bash
-gh auth login                      # as your main account
+gh auth login                      # as code-ravi007
 gh auth refresh -s workflow        # lets the script add the workflow file
-git clone https://github.com/ravikumar1002/ai-company-agents && cd ai-company-agents
-scripts/enable-repo.sh ravikumar1002/my-app            # one repo
-scripts/enable-repo.sh ravikumar1002/a ravikumar1002/b # several
+git clone https://github.com/code-ravi007/ai-company-agents && cd ai-company-agents
+scripts/enable-repo.sh code-ravi007/my-app            # one repo
+scripts/enable-repo.sh code-ravi007/a code-ravi007/b # several
 scripts/enable-repo.sh --all                           # asks about each of your repos
 ```
 
 It asks for the two tokens without echoing them (or reads `CLAUDE_CODE_OAUTH_TOKEN` and `AI_COMPANY_GITHUB_TOKEN` from the environment), then for each repository:
 
-1. invites the bot with Write access and accepts the invite as the bot,
-2. stores the secrets `CLAUDE_CODE_OAUTH_TOKEN` and `AI_COMPANY_GITHUB_TOKEN` (and `ANTHROPIC_API_KEY` if you give one),
-3. creates the `ai:build` label,
-4. opens a PR adding `.github/workflows/ai-company.yml`.
+1. stores the secrets `CLAUDE_CODE_OAUTH_TOKEN` and `AI_COMPANY_GITHUB_TOKEN` (and `ANTHROPIC_API_KEY` if you give one),
+2. creates the `ai:build` label,
+3. opens a PR adding `.github/workflows/ai-company.yml`.
 
 Merge that PR and the team is live in that repository. Personal GitHub accounts have no account-wide secrets, so each repository stores its own copy; the script does that for you. (With a GitHub organization you could store the secrets once at organization level instead.)
 
-**Manual alternative:** copy [templates/ai-company.yml](../templates/ai-company.yml) to `.github/workflows/ai-company.yml`, add the secrets under **Settings → Secrets and variables → Actions**, and add the bot as a collaborator. Inside Claude Code, `/ai-company:enable-github-automation` prepares the files for you.
+**Manual alternative:** copy [templates/ai-company.yml](../templates/ai-company.yml) to `.github/workflows/ai-company.yml` and add the secrets under **Settings → Secrets and variables → Actions**. Inside Claude Code, `/ai-company:enable-github-automation` prepares the files for you.
+
+### Repositories owned by another account
+
+If a repository belongs to a different account, set `AI_COMPANY_BOT=code-ravi007` and run the script signed in as that repository's owner: it then also invites `code-ravi007` as a collaborator and accepts the invite. Fine-grained tokens can't reach another personal account's repositories, so in that case the token must be a classic token with only the `repo` scope.
 
 ### Optional per-repository settings
 

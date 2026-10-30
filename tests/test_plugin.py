@@ -100,7 +100,7 @@ def test_hook_ignores_garbage_input(capsys):
 def test_caller_template_matches_skill():
     template = (ROOT / "templates" / "ai-company.yml").read_text()
     skill = (PLUGIN / "skills" / "enable-github-automation" / "SKILL.md").read_text()
-    assert "uses: ravikumar1002/ai-company-agents/.github/workflows/team.yml@main" in template
+    assert "uses: code-ravi007/ai-company-agents/.github/workflows/team.yml@main" in template
     assert template.strip() in skill
 
 

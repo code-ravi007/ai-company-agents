@@ -5,7 +5,7 @@ name: AI company team
 #
 #   jobs:
 #     team:
-#       uses: ravikumar1002/ai-company-agents/.github/workflows/team.yml@main
+#       uses: code-ravi007/ai-company-agents/.github/workflows/team.yml@main
 #       secrets: inherit
 #
 # Triggers handled (they come from the caller's `on:` block):
@@ -20,7 +20,7 @@ on:
       tool_repository:
         description: "Where the team's code lives"
         type: string
-        default: ravikumar1002/ai-company-agents
+        default: code-ravi007/ai-company-agents
       tool_ref:
         description: "Version of the team to run (tag or branch)"
         type: string
