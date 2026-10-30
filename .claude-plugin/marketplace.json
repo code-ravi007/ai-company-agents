@@ -1,0 +1,20 @@
+{
+  "name": "ai-company-agents",
+  "owner": {
+    "name": "code-ravi007",
+    "url": "https://github.com/code-ravi007"
+  },
+  "metadata": {
+    "description": "A small AI product team for Claude Code: manager, designer, developer and reviewer.",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "ai-company",
+      "source": "./plugins/ai-company",
+      "description": "Turn an idea into a reviewed change: spec, design, implementation and review by four specialist agents, with safety rules built in.",
+      "category": "development",
+      "keywords": ["agents", "product", "design", "development", "code-review"]
+    }
+  ]
+}
