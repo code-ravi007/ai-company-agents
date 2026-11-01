@@ -5,7 +5,10 @@ from ai_company.pipeline import Pipeline
 from ai_company.runner import SdkRunner, UsageLimitPause
 from ai_company.state import RunState
 
-from conftest import APPROVE, CHANGES, SPEC, FakeGitHub, FakeRunner, designer_writes, developer_writes, git
+from conftest import (
+    APPROVE, CHANGES, QA_FAIL, QA_PASS, SPEC, FakeGitHub, FakeRunner, designer_writes, developer_writes, git, qa_writes,
+    writer_writes,
+)
 
 
 def test_local_idea_runs_every_stage(config, make_git, repo):
@@ -14,16 +17,20 @@ def test_local_idea_runs_every_stage(config, make_git, repo):
         "designer": [designer_writes],
         "developer": [developer_writes("<h1>Hello</h1>")],
         "reviewer": [APPROVE],
+        "qa": [qa_writes(QA_PASS)],
+        "tech-writer": [writer_writes],
     })
     state = asyncio.run(Pipeline(config, runner, make_git()).run_idea("Add a greeting page"))
 
     assert state.stage == "done", state.error
-    assert [c[0] for c in runner.calls] == ["manager", "designer", "developer", "reviewer"]
+    assert [c[0] for c in runner.calls] == ["manager", "designer", "developer", "reviewer", "qa", "tech-writer"]
     assert state.branch == "ai/greeting-page"
-    files = git(repo, "show", "--name-only", "--format=", "HEAD")
+    files = git(repo, "diff", "--name-only", "main...HEAD")
     assert "hello.html" in files
     assert "docs/ai-company/greeting-page/spec.md" in git(repo, "ls-files")
     assert "docs/ai-company/greeting-page/design.md" in git(repo, "ls-files")
+    assert "docs/ai-company/greeting-page/qa/report.md" in git(repo, "ls-files")
+    assert "CHANGELOG.md" in git(repo, "ls-files")
     assert ".ai-company" not in git(repo, "ls-files")
     assert git(repo, "rev-parse", "--abbrev-ref", "HEAD").strip() == "ai/greeting-page"
 
@@ -33,10 +40,13 @@ def test_designer_is_skipped_for_internal_work(config, make_git):
         "manager": [{**SPEC, "needs_design": False}],
         "developer": [developer_writes("x")],
         "reviewer": [APPROVE],
+        "tech-writer": [writer_writes],
     })
     state = asyncio.run(Pipeline(config, runner, make_git()).run_idea("Refactor"))
     assert state.stage == "done"
-    assert "designer" not in [c[0] for c in runner.calls]
+    roles = [c[0] for c in runner.calls]
+    assert "designer" not in roles and "qa" not in roles  # no UI, no browser QA
+    assert roles[-1] == "tech-writer"
 
 
 def test_review_loop_sends_feedback_back_to_developer(config, make_git):
@@ -45,6 +55,8 @@ def test_review_loop_sends_feedback_back_to_developer(config, make_git):
         "designer": [designer_writes],
         "developer": [developer_writes("Hello"), developer_writes("Hello!")],
         "reviewer": [CHANGES, APPROVE],
+        "qa": [qa_writes(QA_PASS)],
+        "tech-writer": [writer_writes],
     })
     state = asyncio.run(Pipeline(config, runner, make_git()).run_idea("Greeting"))
     assert state.stage == "done"
@@ -72,6 +84,8 @@ def test_usage_limit_pauses_and_resumes_without_redoing_work(config, make_git):
         "designer": [designer_writes],
         "developer": [UsageLimitPause(resets_at=1_900_000_000), developer_writes("Hello")],
         "reviewer": [APPROVE],
+        "qa": [qa_writes(QA_PASS)],
+        "tech-writer": [writer_writes],
     })
     pipeline = Pipeline(config, runner, make_git())
     state = asyncio.run(pipeline.run_idea("Greeting"))
@@ -91,6 +105,8 @@ def test_github_flow_opens_pr_and_tracks_status(config, make_git, repo):
         "designer": [designer_writes],
         "developer": [developer_writes("Hello")],
         "reviewer": [APPROVE],
+        "qa": [qa_writes(QA_PASS)],
+        "tech-writer": [writer_writes],
     })
     state = asyncio.run(Pipeline(config, runner, make_git(), github=gh).run_issue(7))
 
@@ -99,6 +115,7 @@ def test_github_flow_opens_pr_and_tracks_status(config, make_git, repo):
     pr = gh.prs[0]
     assert pr["draft"] is False
     assert "Closes #7" in pr["body"]
+    assert "## QA in a browser" in pr["body"] and "## Docs updated" in pr["body"]
     assert gh.review_requests == [(pr["number"], "code-ravi007")]
     assert gh.labels[7] == {"ai:pr-open"}
     # Branch was pushed to origin.
@@ -137,6 +154,8 @@ def test_paused_issue_resumes_from_github_state(config, make_git):
         "designer": [UsageLimitPause(resets_at=100.0), designer_writes],
         "developer": [developer_writes("Hello")],
         "reviewer": [APPROVE],
+        "qa": [qa_writes(QA_PASS)],
+        "tech-writer": [writer_writes],
     })
     pipeline = Pipeline(config, runner, make_git(), github=gh, clock=lambda: 50.0)
     asyncio.run(pipeline.run_issue(5))
@@ -149,6 +168,52 @@ def test_paused_issue_resumes_from_github_state(config, make_git):
     [state] = asyncio.run(pipeline.resume_paused())
     assert state.stage == "done"
     assert [c[0] for c in runner.calls].count("manager") == 1
+
+
+def test_qa_bugs_go_back_to_developer(config, make_git):
+    runner = FakeRunner({
+        "manager": [SPEC],
+        "designer": [designer_writes],
+        "developer": [developer_writes("Hello"), developer_writes("Hello!")],
+        "reviewer": [APPROVE, APPROVE],
+        "qa": [qa_writes(QA_FAIL), qa_writes(QA_PASS)],
+        "tech-writer": [writer_writes],
+    })
+    state = asyncio.run(Pipeline(config, runner, make_git()).run_idea("Greeting"))
+    assert state.stage == "done", state.error
+    assert state.qa_round == 2 and state.qa["verdict"] == "pass"
+    second_dev_prompt = [p for r, p in runner.calls if r == "developer"][1]
+    assert "Greet button dead" in second_dev_prompt
+
+
+def test_qa_still_failing_makes_a_draft_pr(config, make_git):
+    gh = FakeGitHub(issues={3: {"number": 3, "title": "Greeting", "body": ""}})
+    runner = FakeRunner({
+        "manager": [SPEC],
+        "designer": [designer_writes],
+        "developer": [developer_writes("a"), developer_writes("b")],
+        "reviewer": [APPROVE, APPROVE],
+        "qa": [qa_writes(QA_FAIL), qa_writes(QA_FAIL)],
+        "tech-writer": [writer_writes],
+    })
+    asyncio.run(Pipeline(config, runner, make_git(), github=gh).run_issue(3))
+    assert gh.prs[0]["draft"] is True
+    assert "Greet button dead" in gh.prs[0]["body"]
+
+
+def test_qa_and_docs_can_be_turned_off(config, make_git):
+    from dataclasses import replace
+
+    runner = FakeRunner({
+        "manager": [SPEC],
+        "designer": [designer_writes],
+        "developer": [developer_writes("Hello")],
+        "reviewer": [APPROVE],
+    })
+    cfg = replace(config, qa_enabled=False, docs_enabled=False)
+    state = asyncio.run(Pipeline(cfg, runner, make_git()).run_idea("Greeting"))
+    assert state.stage == "done"
+    assert [c[0] for c in runner.calls] == ["manager", "designer", "developer", "reviewer"]
 
 
 def test_config_from_toml_and_env(repo):

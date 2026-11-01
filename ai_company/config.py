@@ -46,6 +46,17 @@ class Config:
     # "npm test" or "pytest -q". Empty means "let the developer decide".
     test_command: str = ""
     max_review_rounds: int = 2
+    # QA tests user-facing changes in a browser after the review; a failed QA
+    # sends the bugs back to the developer at most this many times.
+    qa_enabled: bool = True
+    max_qa_rounds: int = 1
+    # The tech writer updates README, docs and CHANGELOG before the PR opens.
+    docs_enabled: bool = True
+    # The support agent triages issues opened by people other than the owner.
+    support_enabled: bool = True
+    # False: support posts its labels and a *draft* reply for the owner.
+    # True: support replies to the issue author directly.
+    support_auto_reply: bool = False
     # "auto": Claude subscription token if set, else API key.
     # "subscription" or "api" forces one.
     auth_mode: str = "auto"
@@ -56,15 +67,24 @@ class Config:
     designer: RoleSettings = field(default_factory=lambda: RoleSettings(max_turns=25, max_budget_usd=2.0))
     developer: RoleSettings = field(default_factory=lambda: RoleSettings(effort="xhigh", max_turns=80, max_budget_usd=8.0))
     reviewer: RoleSettings = field(default_factory=lambda: RoleSettings(max_turns=30, max_budget_usd=3.0))
+    qa: RoleSettings = field(default_factory=lambda: RoleSettings(max_turns=50, max_budget_usd=3.0))
+    tech_writer: RoleSettings = field(default_factory=lambda: RoleSettings(effort="medium", max_turns=30, max_budget_usd=1.5))
+    researcher: RoleSettings = field(default_factory=lambda: RoleSettings(max_turns=40, max_budget_usd=3.0))
+    marketing: RoleSettings = field(default_factory=lambda: RoleSettings(max_turns=40, max_budget_usd=2.0))
+    content_writer: RoleSettings = field(default_factory=lambda: RoleSettings(max_turns=40, max_budget_usd=2.0))
+    support: RoleSettings = field(default_factory=lambda: RoleSettings(effort="medium", max_turns=20, max_budget_usd=0.5))
 
     def triggerers(self) -> set[str]:
         return set(self.allowed_triggerers) | ({self.owner_login} if self.owner_login else set())
 
     def role(self, name: str) -> RoleSettings:
-        return getattr(self, name)
+        return getattr(self, name.replace("-", "_"))
 
 
-_ROLE_NAMES = ("manager", "designer", "developer", "reviewer")
+_ROLE_NAMES = (
+    "manager", "designer", "developer", "reviewer", "qa", "tech_writer",
+    "researcher", "marketing", "content_writer", "support",
+)
 
 
 def _coerce(value: object, like: object) -> object:

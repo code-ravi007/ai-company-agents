@@ -15,13 +15,16 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-STAGES = ("manager", "designer", "developer", "reviewer", "pr", "done")
+STAGES = ("manager", "designer", "developer", "reviewer", "qa", "docs", "pr", "done")
 MARKER_RE = re.compile(r"<!-- ai-company-state:([A-Za-z0-9+/=]+) -->")
 
 
 @dataclass
 class RunState:
     key: str
+    # "build" for the full pipeline, or the task role that owns this run
+    # ("researcher", "marketing", "content-writer").
+    kind: str = "build"
     title: str = ""
     request: str = ""
     issue: int | None = None
@@ -32,6 +35,10 @@ class RunState:
     dev: dict[str, Any] = field(default_factory=dict)
     review: dict[str, Any] = field(default_factory=dict)
     review_round: int = 0
+    qa: dict[str, Any] = field(default_factory=dict)
+    qa_round: int = 0
+    docs: dict[str, Any] = field(default_factory=dict)
+    task: dict[str, Any] = field(default_factory=dict)
     test_output: str = ""
     pr_number: int | None = None
     pr_url: str = ""

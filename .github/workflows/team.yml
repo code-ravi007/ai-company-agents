@@ -9,8 +9,11 @@ name: AI company team
 #       secrets: inherit
 #
 # Triggers handled (they come from the caller's `on:` block):
-#   - `ai:build` label added to an issue
-#   - `/ai build` comment on an issue, `/ai revise` comment or review on a team PR
+#   - `ai:build` label added to an issue: the full build pipeline
+#   - `ai:research`, `ai:marketing`, `ai:content` labels: one document in a PR
+#   - a new issue opened by someone else: support triage
+#   - `/ai build|research|marketing|content|triage` comments on an issue,
+#     `/ai revise` comment or review on a team PR
 #   - workflow_dispatch with an idea or an issue number
 #   - schedule: resume runs paused by the usage limit
 
@@ -56,7 +59,8 @@ jobs:
     if: >-
       github.event_name == 'schedule' ||
       github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'issues' && github.event.label.name == 'ai:build') ||
+      (github.event_name == 'issues' && github.event.action == 'opened') ||
+      (github.event_name == 'issues' && contains(fromJSON('["ai:build","ai:research","ai:marketing","ai:content"]'), github.event.label.name)) ||
       (github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/ai ')) ||
       (github.event_name == 'pull_request_review' && startsWith(github.event.review.body, '/ai revise'))
     runs-on: ubuntu-latest
