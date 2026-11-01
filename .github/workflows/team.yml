@@ -72,6 +72,9 @@ jobs:
           repository: ${{ inputs.tool_repository }}
           ref: ${{ inputs.tool_ref }}
           path: _ai_company_tool
+          # The calling repository's own GITHUB_TOKEN cannot read another
+          # private repository, so the team's code is fetched with the bot token.
+          token: ${{ secrets.AI_COMPANY_GITHUB_TOKEN }}
           persist-credentials: false
 
       - name: Move the team out of the project checkout
