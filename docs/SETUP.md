@@ -73,7 +73,7 @@ If a repository belongs to a different account, set `AI_COMPANY_BOT=code-ravi007
 ### Growth and support roles
 
 - **Research, launch kit, blog post:** add the label `ai:research`, `ai:marketing` or `ai:content` to an issue that describes what you want (for `ai:marketing`, you can also comment `/ai marketing` on a merged PR). The agent writes one document and opens a PR. Comment `/ai revise` on that PR after leaving review comments to get a new draft.
-- **Support:** every new issue opened by someone other than you gets labels (bug, question, enhancement, duplicate, needs-info, invalid, good first issue) and a comment with a *suggested* reply for you. Set `support_auto_reply = true` to let it reply to the author directly, or `support_enabled = false` to turn it off. Comment `/ai triage` on any issue to run it by hand.
+- **Support (off by default):** set `support_enabled = true` in `ai-company.toml` and every new issue opened by someone other than you gets labels (bug, question, enhancement, duplicate, needs-info, invalid, good first issue) and a comment with a *suggested* reply for you. Set `support_auto_reply = true` to let it reply to the author directly. Each triage is a small Claude run capped by `[support] max_budget_usd`, and long issues are cut, but on a public repo anyone can open issues, so turn it on deliberately. Comment `/ai triage` on any issue to run it by hand.
 - **QA tester and tech writer** run automatically inside the build pipeline. Turn them off with `qa_enabled = false` or `docs_enabled = false`.
 
 Each role uses your Claude usage. On a Pro plan, consider lighter models for the support, tech writer and growth roles (see `templates/ai-company.toml`).

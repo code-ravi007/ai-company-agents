@@ -20,7 +20,7 @@ A small AI company for [Claude Code](https://code.claude.com): ten agents that b
 | **Researcher** | label `ai:research` or comment `/ai research` | A sourced research brief in `docs/ai-company/research/` |
 | **Marketing** | label `ai:marketing`, or comment `/ai marketing` on a merged PR | A launch kit in `marketing/`: positioning, landing copy, social posts, launch email, SEO |
 | **Content writer** | label `ai:content` on an issue with the topic | A blog post or article draft in `content/` |
-| **Support** | nothing: it runs on every new issue from someone else | Labels and a drafted reply for you (or a direct reply if you turn that on) |
+| **Support** | `support_enabled = true` (off by default); then it runs on every new issue from someone else | Labels and a drafted reply for you (or a direct reply if you turn that on) |
 
 Nobody posts, publishes or sends anything outside GitHub. Marketing and content are drafts for you to edit and use.
 
@@ -96,7 +96,7 @@ The script stores the secrets, creates the `ai:build` label and opens a PR that 
 | Leave review comments on the PR, then comment `/ai revise` | Addresses them, re-reviews, pushes |
 | Actions → *AI company* → *Run workflow* with an idea | Opens an issue for the idea and builds it |
 | Add `ai:research`, `ai:marketing` or `ai:content` to an issue (or comment `/ai research`, `/ai marketing`, `/ai content`) | The Researcher, Marketing or Content writer writes one document and opens a PR |
-| Someone else opens an issue | Support labels it and drafts a reply for you; comment `/ai triage` to run it on any issue |
+| Someone else opens an issue (support on) | Support labels it and drafts a reply for you; comment `/ai triage` to run it on any issue |
 | Open any pull request, or comment `@claude <question>` | Claude reviews it with inline comments, or answers (`claude-review.yml`) |
 
 Each issue gets one status comment the team keeps up to date, plus labels (`ai:in-progress`, `ai:needs-info`, `ai:paused`, `ai:pr-open`, `ai:failed`). See [docs/SETUP.md](docs/SETUP.md) for the one-time setup (a GitHub token and a Claude token).
@@ -112,7 +112,7 @@ The team runs on your Claude subscription (`CLAUDE_CODE_OAUTH_TOKEN` from `claud
 - **Nothing is deleted**: `rm`, `rmdir`, `unlink`, `find -delete`, `git rm`, `git clean`, `git reset --hard`, force pushes, and file deletes from Python or Node are refused.
 - **Agents never touch git history or GitHub**: only `git status/diff/log/show` are allowed. You (locally) or the orchestrator (on GitHub) commit and open PRs.
 - **Secrets stay secret**: tokens are removed from the orchestrator's environment and never stored in `.git/config`; agents can't read `.env` files, credential files, or token variables.
-- **Each role stays in its lane**: the Manager, Designer, Researcher and QA tester write only the team's docs, the Tech writer only documentation, Marketing only `marketing/`, the Content writer only `content/`; the Reviewer and Support write nothing. Nobody edits CI workflows, `.git/`, or the team's own code.
+- **Each role stays in its lane**: the Manager, Designer, Researcher and QA tester write only the team's docs, the Tech writer only documentation, Marketing only `marketing/`, the Content writer only `content/`; the Reviewer and Support write nothing. Roles with a shell but a limited lane (QA, Reviewer) can't write files through it either, and the run fails if QA changes anything outside the team's docs. Nobody edits CI workflows, `.git/`, or the team's own code.
 - **Web access only where needed**: only the Researcher, Marketing and Content writer can search and read the web, and nobody can post anything.
 - **Strangers can't steer the team**: Support reads issues from anyone, but it is read-only and can only add labels from a fixed list and one comment; agent-written replies never @-mention anyone.
 - **Only you trigger it and only you merge**: the team ignores events from anyone not in `allowed_triggerers` (default: the repo owner), and it cannot merge.

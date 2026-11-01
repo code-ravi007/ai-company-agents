@@ -53,7 +53,9 @@ class Config:
     # The tech writer updates README, docs and CHANGELOG before the PR opens.
     docs_enabled: bool = True
     # The support agent triages issues opened by people other than the owner.
-    support_enabled: bool = True
+    # Off by default: on a public repo anyone can open issues, and each triage
+    # is a (small, budget-capped) Claude run on your subscription.
+    support_enabled: bool = False
     # False: support posts its labels and a *draft* reply for the owner.
     # True: support replies to the issue author directly.
     support_auto_reply: bool = False

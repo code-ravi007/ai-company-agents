@@ -186,6 +186,40 @@ def test_qa_bugs_go_back_to_developer(config, make_git):
     assert "Greet button dead" in second_dev_prompt
 
 
+def test_qa_fix_gets_its_own_review_rounds(config, make_git):
+    from dataclasses import replace
+
+    runner = FakeRunner({
+        "manager": [SPEC],
+        "designer": [designer_writes],
+        "developer": [developer_writes("Hello"), developer_writes("Hello!")],
+        "reviewer": [APPROVE, APPROVE],
+        "qa": [qa_writes(QA_FAIL), qa_writes(QA_PASS)],
+        "tech-writer": [writer_writes],
+    })
+    state = asyncio.run(Pipeline(replace(config, max_review_rounds=1), runner, make_git()).run_idea("Greeting"))
+    assert state.stage == "done", state.error
+    assert [c[0] for c in runner.calls].count("reviewer") == 2  # the QA fix was reviewed
+    assert state.qa["verdict"] == "pass" and state.docs
+
+
+def test_qa_writing_outside_its_lane_fails_the_run(config, make_git):
+    def qa_strays(cwd, prompt):
+        qa_writes(QA_PASS)(cwd, prompt)
+        (cwd / "src.py").write_text("print('sneaky')\n")
+        return QA_PASS
+
+    runner = FakeRunner({
+        "manager": [SPEC],
+        "designer": [designer_writes],
+        "developer": [developer_writes("Hello")],
+        "reviewer": [APPROVE],
+        "qa": [qa_strays],
+    })
+    state = asyncio.run(Pipeline(config, runner, make_git()).run_idea("Greeting"))
+    assert "outside its lane" in state.error and "src.py" in state.error
+
+
 def test_qa_still_failing_makes_a_draft_pr(config, make_git):
     gh = FakeGitHub(issues={3: {"number": 3, "title": "Greeting", "body": ""}})
     runner = FakeRunner({

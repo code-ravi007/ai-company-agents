@@ -106,6 +106,14 @@ class Pipeline:
         found = [s for s in bot_states if s]
         return found[-1] if found else None
 
+    def _load_paused_from_issue(self, issue: int) -> RunState | None:
+        """The most recent run on the issue that paused (build or task), else the latest."""
+        if not self.github:
+            return None
+        found = [s for s in (RunState.from_comment(c.get("body", "")) for c in self.github.issue_comments(issue)) if s]
+        paused = [s for s in found if s.paused_until is not None and s.stage != "done"]
+        return (paused or found or [None])[-1]
+
     def _load_task_from_issue(self, issue: int, kind: str) -> RunState | None:
         if not self.github:
             return None
@@ -163,7 +171,7 @@ class Pipeline:
         assert self.github, "GitHub is required to resume runs"
         resumed = []
         for issue in self.github.issues_with_label("ai:paused"):
-            state = self._load_from_issue(issue["number"])
+            state = self._load_paused_from_issue(issue["number"])
             if state and state.paused_until and state.paused_until > self.clock():
                 log.info("Issue #%s is paused until %s; skipping.", issue["number"], state.paused_until)
                 continue
@@ -256,7 +264,12 @@ class Pipeline:
                 state.dev = result.output
                 state.test_output = self._run_tests(state)
                 state.advance("reviewer")
-                message = render.commit_message(state) if state.review_round == 0 else f"Address review feedback (round {state.review_round})"
+                if state.review_round:
+                    message = f"Address review feedback (round {state.review_round})"
+                elif state.qa_round:
+                    message = f"Fix QA findings (round {state.qa_round})"
+                else:
+                    message = render.commit_message(state)
                 self._checkpoint_branch(state, message)
                 self._save(state)
             if state.stage == "reviewer":
@@ -275,12 +288,14 @@ class Pipeline:
             if state.stage == "qa":
                 qa_dir = self._docs_path(state, "qa")
                 result = await self._run_role(state, "qa", render.qa_prompt(state, self.config, qa_dir))
+                self._assert_lane("qa", (self.config.docs_dir,))
                 state.qa = {**result.output, "path": qa_dir}
                 state.qa_round += 1
                 if state.qa.get("verdict") == "pass" or state.qa_round > self.config.max_qa_rounds:
                     state.stage = "docs"
                 else:
                     state.review = {}  # the next developer round fixes QA's bugs
+                    state.review_round = 0  # ...and gets a full set of review rounds
                     state.stage = "developer"
                 self._checkpoint_branch(state, f"QA report (round {state.qa_round})")
                 self._save(state)
@@ -302,6 +317,17 @@ class Pipeline:
             self._open_pr(state)
             state.advance("done")
             self._save(state)
+
+    def _assert_lane(self, role: str, prefixes: tuple[str, ...]) -> None:
+        """Fail the run if a role changed files outside its lane (e.g. from a script)."""
+        status = self.git.run("status", "--porcelain", "--untracked-files=all", check=False)
+        stray = []
+        for line in status.splitlines():
+            path = line[3:].split(" -> ")[-1].strip().strip('"')
+            if path and not any(path == p or path.startswith(p.rstrip("/") + "/") for p in prefixes):
+                stray.append(path)
+        if stray:
+            raise AgentRunError(f"{role} changed files outside its lane: {', '.join(sorted(stray)[:10])}")
 
     def _wants_qa(self, state: RunState) -> bool:
         return self.config.qa_enabled and bool(state.spec.get("needs_design"))
@@ -391,6 +417,7 @@ class Pipeline:
 
     # -------------------------------------------------------- document tasks
     def _task_path(self, role: str, slug: str) -> str:
+        """`slug` includes the issue number, so two issues never share a file."""
         return {
             "researcher": f"{self.config.docs_dir}/research/{slug}.md",
             "marketing": f"marketing/{slug}/launch-kit.md",
@@ -418,14 +445,15 @@ class Pipeline:
         if not state.branch:
             short = {"researcher": "research", "marketing": "launch", "content-writer": "content"}[state.kind]
             state.branch = f"{self.config.branch_prefix}{short}-{state.issue}-{slugify(state.title)}"
-            state.task["path"] = self._task_path(state.kind, slugify(state.title))
+            state.task["path"] = self._task_path(state.kind, f"{state.issue}-{slugify(state.title)}")
             state.stage = "developer"  # "working"; task runs reuse the build stage names
             self._save(state)
         self.git.start_branch(state.branch, self.config.base_branch)
         path = state.task["path"]
         if state.stage == "developer":
             result = await self._run_role(state, state.kind, render.task_prompt(state.kind, state.request, path))
-            if not (self.config.repo_root / path).exists():
+            changed = self.git.run("status", "--porcelain", "--untracked-files=all", "--", path, check=False).strip()
+            if not (self.config.repo_root / path).exists() or not changed:
                 raise AgentRunError(f"{state.kind} did not write {path}")
             state.task.update(result.output)
             state.stage = "pr"

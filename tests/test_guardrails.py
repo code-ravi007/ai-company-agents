@@ -155,3 +155,35 @@ def test_team_code_and_config_are_protected(tmp_path):
 def test_team_token_variable_is_not_readable(tmp_path):
     g = guard(tmp_path, RolePolicy(can_bash=True, write_prefixes=(".",)))
     assert not g.check("Bash", {"command": "echo $AI_COMPANY_GITHUB_TOKEN"}).allowed
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "echo x > src/app.py",
+        "echo x >> src/app.py",
+        "echo x >src/app.py",
+        "cat a | tee src/app.py",
+        "cp docs/x.md src/app.py",
+        "mv README.md other.md",
+        "sed -i 's/a/b/' src/app.py",
+        "touch src/new.py",
+    ],
+)
+def test_limited_lane_roles_cannot_write_through_the_shell(tmp_path, command):
+    from ai_company.guardrails import role_policies
+
+    for role in ("qa", "reviewer"):
+        assert not guard(tmp_path, role_policies("docs/ai-company")[role]).check("Bash", {"command": command}).allowed, (role, command)
+
+
+def test_limited_lane_roles_can_still_redirect_inside_their_lane(tmp_path):
+    import tempfile
+
+    from ai_company.guardrails import role_policies
+
+    qa = guard(tmp_path, role_policies("docs/ai-company")["qa"])
+    assert qa.check("Bash", {"command": "npm test > docs/ai-company/x/qa/test.log 2>&1"}).allowed
+    assert qa.check("Bash", {"command": "python check.py 2>/dev/null"}).allowed
+    assert qa.check("Bash", {"command": f"echo x > {tempfile.gettempdir()}/shot.py"}).allowed
+    assert guard(tmp_path, DEV).check("Bash", {"command": "echo x > src/app.py"}).allowed

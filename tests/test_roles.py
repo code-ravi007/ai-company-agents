@@ -34,9 +34,9 @@ def writes_doc(cwd, prompt):
 @pytest.mark.parametrize(
     "role,expected_path",
     [
-        ("researcher", "docs/ai-company/research/habit-tracker-apps.md"),
-        ("marketing", "marketing/habit-tracker-apps/launch-kit.md"),
-        ("content-writer", "content/habit-tracker-apps.md"),
+        ("researcher", "docs/ai-company/research/4-habit-tracker-apps.md"),
+        ("marketing", "marketing/4-habit-tracker-apps/launch-kit.md"),
+        ("content-writer", "content/4-habit-tracker-apps.md"),
     ],
 )
 def test_task_writes_one_document_and_opens_a_pr(config, make_git, repo, role, expected_path):
@@ -65,6 +65,41 @@ def test_task_that_writes_nothing_fails(config, make_git):
     state = asyncio.run(Pipeline(config, runner, make_git(), github=gh).run_task("content-writer", 4))
     assert "did not write" in state.error
     assert "ai:failed" in gh.labels[4]
+
+
+def test_task_that_leaves_an_existing_file_untouched_fails(config, make_git, repo):
+    target = repo / "content" / "4-topic.md"
+    target.parent.mkdir(parents=True)
+    target.write_text("# Old post\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-qm", "old post")
+    git(repo, "push", "-q", "origin", "HEAD")
+    gh = FakeGitHub(issues={4: {"number": 4, "title": "Topic", "body": ""}})
+    runner = FakeRunner({"content-writer": [DOC]})
+    state = asyncio.run(Pipeline(config, runner, make_git(), github=gh).run_task("content-writer", 4))
+    assert "did not write" in state.error
+
+
+def test_two_issues_with_the_same_title_get_separate_files(config, make_git, repo):
+    gh = FakeGitHub(issues={
+        4: {"number": 4, "title": "Launch plan", "body": ""},
+        5: {"number": 5, "title": "Launch plan", "body": ""},
+    })
+    runner = FakeRunner({"marketing": [writes_doc, writes_doc]})
+    pipeline = Pipeline(config, runner, make_git(), github=gh)
+    paths = [asyncio.run(pipeline.run_task("marketing", n)).task["path"] for n in (4, 5)]
+    assert paths[0] != paths[1]
+
+
+def test_resume_picks_the_run_that_paused(config, make_git):
+    gh = FakeGitHub(issues={6: {"number": 6, "title": "Pricing research", "body": ""}})
+    runner = FakeRunner({"researcher": [UsageLimitPause(resets_at=100.0), writes_doc]})
+    pipeline = Pipeline(config, runner, make_git(), github=gh, clock=lambda: 200.0)
+    asyncio.run(pipeline.run_task("researcher", 6))
+    finished_build = RunState(key="issue-6", issue=6, stage="done")
+    gh.comments.setdefault(6, []).append({"id": 999, "body": finished_build.marker()})
+    [state] = asyncio.run(pipeline.resume_paused())
+    assert state.kind == "researcher" and state.stage == "done"
 
 
 def test_paused_task_resumes_as_the_same_task(config, make_git):
@@ -125,11 +160,21 @@ def dispatch(monkeypatch, tmp_path, config, name, event):
 
 
 def test_new_issue_from_a_stranger_goes_to_support(monkeypatch, tmp_path, config):
+    from dataclasses import replace
+
     event = {"action": "opened", "issue": {"number": 3}, "sender": {"login": "stranger"}}
-    assert dispatch(monkeypatch, tmp_path, config, "issues", event) == [("triage_issue", 3)]
+    assert dispatch(monkeypatch, tmp_path, replace(config, support_enabled=True), "issues", event) == [("triage_issue", 3)]
+
+
+def test_support_is_off_by_default(monkeypatch, tmp_path, config):
+    event = {"action": "opened", "issue": {"number": 3}, "sender": {"login": "stranger"}}
+    assert dispatch(monkeypatch, tmp_path, config, "issues", event) == []
 
 
 def test_owner_issues_and_bot_issues_skip_support(monkeypatch, tmp_path, config):
+    from dataclasses import replace
+
+    config = replace(config, support_enabled=True)
     for login in ("code-ravi007", "dependabot[bot]"):
         event = {"action": "opened", "issue": {"number": 3}, "sender": {"login": login}}
         assert dispatch(monkeypatch, tmp_path, config, "issues", event) == []

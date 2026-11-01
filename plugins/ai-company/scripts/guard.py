@@ -108,6 +108,11 @@ DENIED_SUBSTRINGS = [
         r">\s*/(?!dev/null|tmp/)",  # redirecting output to absolute paths outside the repo
     )
 ]
+# Commands that write files. Roles with a limited write lane (everyone except
+# the developer) may not run them; their writes go through Write/Edit, which
+# are checked against the lane.
+FILE_WRITING_COMMANDS = {"tee", "cp", "mv", "ln", "install", "touch", "patch"}
+REDIRECTS = {">", ">>", ">|", "&>", "&>>"}
 SUBSHELL = re.compile(r"\$\(([^()]*)\)|`([^`]*)`")
 SCRATCH_DIR = Path(tempfile.gettempdir()).resolve()
 
@@ -217,6 +222,31 @@ class Guardrails:
             return Decision(False, f"This role may only write under: {allowed}")
         return Decision(True)
 
+    def _full_write(self) -> bool:
+        return any(p in ("", ".") for p in self.policy.write_prefixes)
+
+    def _check_shell_writes(self, first: str, words: list[str]) -> Decision:
+        """Keep limited-lane roles (QA, reviewer) from writing files through the shell."""
+        if first in FILE_WRITING_COMMANDS:
+            return Decision(False, f"`{first}` writes files; this role may only write through the Write tool, inside its lane.")
+        if first in ("sed", "perl") and any(w == "-i" or w.startswith("-i") or w.startswith("--in-place") for w in words[1:]):
+            return Decision(False, f"In-place edits with `{first} -i` are not allowed for this role.")
+        for i, word in enumerate(words):
+            target = None
+            if word in REDIRECTS:
+                target = words[i + 1] if i + 1 < len(words) else ""
+            else:
+                m = re.match(r"^[0-9]*>>?(.+)$", word)
+                if m and word[0] != "-":
+                    target = m.group(1)
+            if target is None or target.startswith("&") or target in ("/dev/null", "/dev/stdout", "/dev/stderr"):
+                continue
+            if self._in_scratch(target):
+                continue
+            if not self._check_write({"file_path": target}).allowed:
+                return Decision(False, f"Redirecting output to {target} is outside this role's write lane.")
+        return Decision(True)
+
     def _check_bash(self, tool_input: dict[str, Any]) -> Decision:
         if not self.policy.can_bash:
             return Decision(False, "This role may not run shell commands.")
@@ -242,6 +272,10 @@ class Guardrails:
                     creates = [a for a in args if not a.startswith("-")] and not {"--list", "-l", "--contains", "--merged", "--no-merged", "--points-at"} & set(args)
                     if creates or GIT_BRANCH_WRITE_FLAGS & set(args):
                         return Decision(False, "`git branch` may only list branches for agents.")
+            if not self._full_write():
+                decision = self._check_shell_writes(first, words)
+                if not decision.allowed:
+                    return decision
             if first in ("npm", "pnpm", "yarn") and any(w in ("publish", "unpublish", "login", "adduser", "token") for w in words[1:]):
                 return Decision(False, "Publishing or logging in to package registries is not allowed.")
             if first in ("pip", "pip3") and "uninstall" in words[1:]:

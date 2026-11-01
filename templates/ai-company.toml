@@ -11,7 +11,7 @@
 # qa_enabled = true                    # QA tests user-facing changes in a browser
 # max_qa_rounds = 1                    # times QA bugs go back to the developer
 # docs_enabled = true                  # tech writer updates README, docs, CHANGELOG
-# support_enabled = true               # support triages new issues from other people
+# support_enabled = false              # true: support triages new issues from other people
 # support_auto_reply = false           # true: support replies to the author directly
 # auth_mode = "auto"                   # "auto", "subscription" or "api"
 # api_fallback_on_limit = false        # true: switch to the API key when the subscription limit is hit
