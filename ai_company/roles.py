@@ -1,4 +1,4 @@
-"""The four team roles, loaded from the Claude Code plugin.
+"""The team roles, loaded from the Claude Code plugin.
 
 Each role's prompt, tool list and preloaded skills come from
 `plugins/ai-company/agents/<role>.md` and `plugins/ai-company/skills/`, so
@@ -17,7 +17,11 @@ from typing import Any
 from ai_company.guardrails import RolePolicy, role_policies
 from ai_company.paths import plugin_dir
 
-ROLE_NAMES = ("manager", "designer", "developer", "reviewer")
+# The build pipeline: idea -> spec -> design -> code -> review -> QA -> docs.
+BUILD_ROLES = ("manager", "designer", "developer", "reviewer", "qa", "tech-writer")
+# Roles that each produce one document in a pull request, on request.
+TASK_ROLES = ("researcher", "marketing", "content-writer")
+ROLE_NAMES = BUILD_ROLES + TASK_ROLES + ("support",)
 FRONTMATTER = re.compile(r"\A---\n(.*?)\n---\n?(.*)\Z", re.S)
 
 
@@ -133,6 +137,61 @@ REVIEWER_SCHEMA = _obj(
 )
 
 
+QA_SCHEMA = _obj(
+    {
+        "verdict": {"type": "string", "enum": ["pass", "fail"]},
+        "summary": {"type": "string"},
+        "bugs": {
+            "type": "array",
+            "items": _obj(
+                {
+                    "title": {"type": "string"},
+                    "steps": {"type": "string"},
+                    "expected": {"type": "string"},
+                    "actual": {"type": "string"},
+                    "screenshot": {"type": "string", "description": "File name of the screenshot, or empty."},
+                }
+            ),
+        },
+        "screenshots": _strings(),
+        "not_tested": _strings(),
+    }
+)
+
+TECH_WRITER_SCHEMA = _obj(
+    {
+        "summary": {"type": "string", "description": "What the docs now cover."},
+        "files_changed": _strings(),
+    }
+)
+
+DOCUMENT_SCHEMA = _obj(
+    {
+        "title": {"type": "string", "description": "Title of the document written."},
+        "summary": {"type": "string", "description": "Two to four sentences for the pull request."},
+        "highlights": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "The three to five most useful points, e.g. the recommendation, the headline, key messages.",
+        },
+        "open_questions": _strings(),
+    }
+)
+
+SUPPORT_LABELS = ("bug", "question", "enhancement", "duplicate", "needs-info", "invalid", "good first issue")
+
+SUPPORT_SCHEMA = _obj(
+    {
+        "category": {"type": "string", "enum": ["bug", "question", "enhancement", "duplicate", "needs-info", "invalid"]},
+        "labels": {"type": "array", "items": {"type": "string", "enum": list(SUPPORT_LABELS)}},
+        "summary": {"type": "string", "description": "One or two sentences for the owner: what this issue is about."},
+        "reply": {"type": "string", "description": "The reply to the issue author, in Markdown, under 120 words."},
+        "ready_for_team": {"type": "boolean", "description": "A confirmed bug or small clear enhancement the build team can take."},
+        "duplicate_of": {"type": "integer", "description": "Number of the open issue this duplicates, or 0."},
+    }
+)
+
+
 @dataclass(frozen=True)
 class Role:
     name: str
@@ -148,6 +207,12 @@ SCHEMAS = {
     "designer": DESIGNER_SCHEMA,
     "developer": DEVELOPER_SCHEMA,
     "reviewer": REVIEWER_SCHEMA,
+    "qa": QA_SCHEMA,
+    "tech-writer": TECH_WRITER_SCHEMA,
+    "researcher": DOCUMENT_SCHEMA,
+    "marketing": DOCUMENT_SCHEMA,
+    "content-writer": DOCUMENT_SCHEMA,
+    "support": SUPPORT_SCHEMA,
 }
 
 

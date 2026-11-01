@@ -5,7 +5,8 @@ One file, two uses:
 
 1. Claude Code PreToolUse hook (see ../hooks/hooks.json). It reads the hook
    input on stdin and blocks tool calls from the team's agents
-   (manager, designer, developer, reviewer) that break the rules below.
+   (manager, designer, developer, reviewer, researcher, qa, tech-writer,
+   marketing, content-writer, support) that break the rules below.
    Calls from your own main session and from other agents are left alone.
 2. Imported by the CI orchestrator (`ai_company.guardrails`), which applies
    the same policy through the Agent SDK's `can_use_tool` callback.
@@ -17,9 +18,13 @@ The policy is deny-by-default:
   Node are refused.
 - Agents never touch git history or GitHub. Only the human (locally) or the
   orchestrator (in CI) commits, pushes and opens pull requests.
-- Writes stay in the repository, and each role in its own area: the manager
-  and designer write only docs, the reviewer writes nothing. `.git/`, CI
+- Writes stay in the repository, and each role in its own area: the manager,
+  designer, researcher and QA tester write only the team's docs, the tech
+  writer only documentation, marketing only `marketing/`, the content writer
+  only `content/`; the reviewer and support write nothing. `.git/`, CI
   workflows, `.env` files and the team's own code are off limits.
+- Only the researcher, marketing and content writer may search and read the
+  web (WebSearch, WebFetch). Nobody posts anything outside GitHub.
 - Reads stay in the repository and skip secret-looking files.
 - Commands that read the environment or credentials, escalate privileges or
   open raw network connections are refused.
@@ -43,6 +48,7 @@ from typing import Any
 READ_TOOLS = {"Read", "Glob", "Grep", "LS"}
 WRITE_TOOLS = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
 BASH_TOOLS = {"Bash"}
+WEB_TOOLS = {"WebSearch", "WebFetch"}
 # In-memory planning, skill-loading and structured-result tools, no side effects.
 SIDE_EFFECT_FREE_TOOLS = {"TodoWrite", "TaskCreate", "TaskUpdate", "TaskList", "TaskGet", "Skill", "StructuredOutput"}
 
@@ -62,7 +68,7 @@ SECRET_PATTERNS = [
     )
 ]
 # The team may not edit its own code, config or guardrails.
-PROTECTED_WRITE_PREFIXES = (".git/", ".github/workflows/", ".agent-team/", "ai_company/", "agent-team.toml")
+PROTECTED_WRITE_PREFIXES = (".git/", ".github/workflows/", ".ai-company/", "ai_company/", "plugins/ai-company/", "ai-company.toml")
 
 # First words of shell commands that are always refused.
 DENIED_COMMANDS = {
@@ -94,7 +100,7 @@ DENIED_SUBSTRINGS = [
         r"\bxargs\b.*\brm\b",
         r"/proc/[^/\s]+/environ",
         r"\.credentials\.json|\.git-credentials|/\.ssh/|\.netrc\b",
-        r"\$\{?(GH_TOKEN|GITHUB_TOKEN|AGENT_GITHUB_TOKEN|ANTHROPIC_API_KEY|CLAUDE_CODE_OAUTH_TOKEN|ANTHROPIC_AUTH_TOKEN)\b",
+        r"\$\{?(GH_TOKEN|GITHUB_TOKEN|AGENT_GITHUB_TOKEN|AI_COMPANY_GITHUB_TOKEN|ANTHROPIC_API_KEY|CLAUDE_CODE_OAUTH_TOKEN|ANTHROPIC_AUTH_TOKEN)\b",
         r"--force\b|\s-f\s.*\bpush\b",
         r"\bos\.(remove|unlink|rmdir)\b|\bshutil\.rmtree\b|\brmSync\b|\bunlinkSync\b|\brimraf\b",
         r"\bpython[0-9.]*\s+-c\b.*\b(environ|getenv)\b",
@@ -102,6 +108,11 @@ DENIED_SUBSTRINGS = [
         r">\s*/(?!dev/null|tmp/)",  # redirecting output to absolute paths outside the repo
     )
 ]
+# Commands that write files. Roles with a limited write lane (everyone except
+# the developer) may not run them; their writes go through Write/Edit, which
+# are checked against the lane.
+FILE_WRITING_COMMANDS = {"tee", "cp", "mv", "ln", "install", "touch", "patch"}
+REDIRECTS = {">", ">>", ">|", "&>", "&>>"}
 SUBSHELL = re.compile(r"\$\(([^()]*)\)|`([^`]*)`")
 SCRATCH_DIR = Path(tempfile.gettempdir()).resolve()
 
@@ -147,6 +158,8 @@ class RolePolicy:
     can_bash: bool = False
     # Repository-relative prefixes this role may write under. Empty = no writes.
     write_prefixes: tuple[str, ...] = ()
+    # May search and read the web (WebSearch, WebFetch).
+    can_web: bool = False
 
 
 @dataclass
@@ -209,6 +222,31 @@ class Guardrails:
             return Decision(False, f"This role may only write under: {allowed}")
         return Decision(True)
 
+    def _full_write(self) -> bool:
+        return any(p in ("", ".") for p in self.policy.write_prefixes)
+
+    def _check_shell_writes(self, first: str, words: list[str]) -> Decision:
+        """Keep limited-lane roles (QA, reviewer) from writing files through the shell."""
+        if first in FILE_WRITING_COMMANDS:
+            return Decision(False, f"`{first}` writes files; this role may only write through the Write tool, inside its lane.")
+        if first in ("sed", "perl") and any(w == "-i" or w.startswith("-i") or w.startswith("--in-place") for w in words[1:]):
+            return Decision(False, f"In-place edits with `{first} -i` are not allowed for this role.")
+        for i, word in enumerate(words):
+            target = None
+            if word in REDIRECTS:
+                target = words[i + 1] if i + 1 < len(words) else ""
+            else:
+                m = re.match(r"^[0-9]*>>?(.+)$", word)
+                if m and word[0] != "-":
+                    target = m.group(1)
+            if target is None or target.startswith("&") or target in ("/dev/null", "/dev/stdout", "/dev/stderr"):
+                continue
+            if self._in_scratch(target):
+                continue
+            if not self._check_write({"file_path": target}).allowed:
+                return Decision(False, f"Redirecting output to {target} is outside this role's write lane.")
+        return Decision(True)
+
     def _check_bash(self, tool_input: dict[str, Any]) -> Decision:
         if not self.policy.can_bash:
             return Decision(False, "This role may not run shell commands.")
@@ -234,6 +272,10 @@ class Guardrails:
                     creates = [a for a in args if not a.startswith("-")] and not {"--list", "-l", "--contains", "--merged", "--no-merged", "--points-at"} & set(args)
                     if creates or GIT_BRANCH_WRITE_FLAGS & set(args):
                         return Decision(False, "`git branch` may only list branches for agents.")
+            if not self._full_write():
+                decision = self._check_shell_writes(first, words)
+                if not decision.allowed:
+                    return decision
             if first in ("npm", "pnpm", "yarn") and any(w in ("publish", "unpublish", "login", "adduser", "token") for w in words[1:]):
                 return Decision(False, "Publishing or logging in to package registries is not allowed.")
             if first in ("pip", "pip3") and "uninstall" in words[1:]:
@@ -247,6 +289,8 @@ class Guardrails:
             decision = self._check_write(tool_input)
         elif tool_name in BASH_TOOLS:
             decision = self._check_bash(tool_input)
+        elif tool_name in WEB_TOOLS:
+            decision = Decision(True) if self.policy.can_web else Decision(False, "This role may not use the web.")
         elif tool_name in SIDE_EFFECT_FREE_TOOLS:
             decision = Decision(True)
         else:
@@ -267,6 +311,14 @@ def role_policies(docs_dir: str = DEFAULT_DOCS_DIR) -> dict[str, RolePolicy]:
         "designer": RolePolicy(can_read=True, can_bash=False, write_prefixes=(docs_dir,)),
         "developer": RolePolicy(can_read=True, can_bash=True, write_prefixes=(".",)),
         "reviewer": RolePolicy(can_read=True, can_bash=True, write_prefixes=()),
+        "researcher": RolePolicy(can_read=True, can_bash=False, write_prefixes=(docs_dir,), can_web=True),
+        "qa": RolePolicy(can_read=True, can_bash=True, write_prefixes=(docs_dir,)),
+        "tech-writer": RolePolicy(
+            can_read=True, can_bash=False, write_prefixes=("docs", docs_dir, "README.md", "CHANGELOG.md")
+        ),
+        "marketing": RolePolicy(can_read=True, can_bash=False, write_prefixes=("marketing",), can_web=True),
+        "content-writer": RolePolicy(can_read=True, can_bash=False, write_prefixes=("content",), can_web=True),
+        "support": RolePolicy(can_read=True, can_bash=False, write_prefixes=()),
     }
 
 

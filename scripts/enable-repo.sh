@@ -9,7 +9,7 @@
 #   1. if the repository belongs to another account, invites the bot account
 #      as a collaborator (and accepts the invite with the bot token),
 #   2. stores the secrets the team needs,
-#   3. creates the ai:build label,
+#   3. creates the ai:build, ai:research, ai:marketing and ai:content labels,
 #   4. opens a pull request that adds .github/workflows/ai-company.yml and
 #      .github/workflows/claude-review.yml (Claude reviews every new PR).
 #
@@ -88,10 +88,16 @@ invite_bot() {
 }
 
 ensure_label() {
-  local repo="$1"
-  gh label create "ai:build" --repo "$repo" --color 5319e7 \
-    --description "Ask the AI company team to build this issue" >/dev/null 2>&1 \
-    && echo "  created label ai:build" || echo "  label ai:build already exists"
+  local repo="$1" name color description
+  while IFS='|' read -r name color description; do
+    gh label create "$name" --repo "$repo" --color "$color" --description "$description" >/dev/null 2>&1 \
+      && echo "  created label $name" || echo "  label $name already exists"
+  done <<'LABELS'
+ai:build|5319e7|Ask the AI company team to build this issue
+ai:research|1d76db|Ask the Researcher for a research brief on this issue
+ai:marketing|e99695|Ask Marketing for a launch kit for this issue or feature
+ai:content|0e8a16|Ask the Content writer for a post on this topic
+LABELS
 }
 
 add_workflow_file() {

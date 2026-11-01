@@ -110,3 +110,80 @@ def test_bash_roles_may_write_scratch_files(tmp_path):
     scratch = Path(tempfile.gettempdir()) / "check.js"
     assert guard(tmp_path, DEV).check("Write", {"file_path": str(scratch)}).allowed
     assert not guard(tmp_path, DESIGNER).check("Write", {"file_path": str(scratch)}).allowed
+
+
+def test_new_roles_stay_in_their_lanes(tmp_path):
+    from ai_company.guardrails import role_policies
+
+    policies = role_policies("docs/ai-company")
+    lanes = {
+        "researcher": ("docs/ai-company/research/x.md", "src/app.py"),
+        "qa": ("docs/ai-company/x/qa/report.md", "src/app.py"),
+        "tech-writer": ("README.md", "src/app.py"),
+        "marketing": ("marketing/x/launch-kit.md", "content/post.md"),
+        "content-writer": ("content/post.md", "marketing/x.md"),
+    }
+    for role, (allowed, denied) in lanes.items():
+        g = guard(tmp_path, policies[role])
+        assert g.check("Write", {"file_path": allowed}).allowed, role
+        assert not g.check("Write", {"file_path": denied}).allowed, role
+    tw = guard(tmp_path, policies["tech-writer"])
+    assert tw.check("Write", {"file_path": "docs/guide.md"}).allowed
+    assert tw.check("Write", {"file_path": "CHANGELOG.md"}).allowed
+    support = guard(tmp_path, policies["support"])
+    assert not support.check("Write", {"file_path": "docs/x.md"}).allowed
+    assert not support.check("Bash", {"command": "ls"}).allowed
+    assert support.check("Read", {"file_path": "README.md"}).allowed
+
+
+def test_only_research_and_writing_roles_use_the_web(tmp_path):
+    from ai_company.guardrails import role_policies
+
+    for role, policy in role_policies().items():
+        g = guard(tmp_path, policy)
+        expected = role in ("researcher", "marketing", "content-writer")
+        assert g.check("WebSearch", {"query": "x"}).allowed is expected, role
+        assert g.check("WebFetch", {"url": "https://example.com"}).allowed is expected, role
+
+
+def test_team_code_and_config_are_protected(tmp_path):
+    g = guard(tmp_path, RolePolicy(can_bash=True, write_prefixes=(".",)))
+    for path in ("ai-company.toml", "plugins/ai-company/scripts/guard.py", ".ai-company/state/x.json", ".github/workflows/ci.yml"):
+        assert not g.check("Write", {"file_path": path}).allowed, path
+
+
+def test_team_token_variable_is_not_readable(tmp_path):
+    g = guard(tmp_path, RolePolicy(can_bash=True, write_prefixes=(".",)))
+    assert not g.check("Bash", {"command": "echo $AI_COMPANY_GITHUB_TOKEN"}).allowed
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "echo x > src/app.py",
+        "echo x >> src/app.py",
+        "echo x >src/app.py",
+        "cat a | tee src/app.py",
+        "cp docs/x.md src/app.py",
+        "mv README.md other.md",
+        "sed -i 's/a/b/' src/app.py",
+        "touch src/new.py",
+    ],
+)
+def test_limited_lane_roles_cannot_write_through_the_shell(tmp_path, command):
+    from ai_company.guardrails import role_policies
+
+    for role in ("qa", "reviewer"):
+        assert not guard(tmp_path, role_policies("docs/ai-company")[role]).check("Bash", {"command": command}).allowed, (role, command)
+
+
+def test_limited_lane_roles_can_still_redirect_inside_their_lane(tmp_path):
+    import tempfile
+
+    from ai_company.guardrails import role_policies
+
+    qa = guard(tmp_path, role_policies("docs/ai-company")["qa"])
+    assert qa.check("Bash", {"command": "npm test > docs/ai-company/x/qa/test.log 2>&1"}).allowed
+    assert qa.check("Bash", {"command": "python check.py 2>/dev/null"}).allowed
+    assert qa.check("Bash", {"command": f"echo x > {tempfile.gettempdir()}/shot.py"}).allowed
+    assert guard(tmp_path, DEV).check("Bash", {"command": "echo x > src/app.py"}).allowed

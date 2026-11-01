@@ -49,7 +49,7 @@ scripts/enable-repo.sh --all                           # asks about each of your
 It asks for the two tokens without echoing them (or reads `CLAUDE_CODE_OAUTH_TOKEN` and `AI_COMPANY_GITHUB_TOKEN` from the environment), then for each repository:
 
 1. stores the secrets `CLAUDE_CODE_OAUTH_TOKEN` and `AI_COMPANY_GITHUB_TOKEN` (and `ANTHROPIC_API_KEY` if you give one),
-2. creates the `ai:build` label,
+2. creates the `ai:build`, `ai:research`, `ai:marketing` and `ai:content` labels,
 3. opens a PR adding `.github/workflows/ai-company.yml` and `.github/workflows/claude-review.yml`.
 
 Merge that PR and the team is live in that repository. Personal GitHub accounts have no account-wide secrets, so each repository stores its own copy; the script does that for you. (With a GitHub organization you could store the secrets once at organization level instead.)
@@ -69,6 +69,14 @@ If a repository belongs to a different account, set `AI_COMPANY_BOT=code-ravi007
 - It only comments; it never pushes code or approves. Only people with write access to the repository can trigger it.
 - Comments come from the Claude GitHub App (`claude[bot]`), which must be installed on the repository: https://github.com/apps/claude.
 - Each review uses your Claude usage. To review every push too, add `synchronize` to the `pull_request` types.
+
+### Growth and support roles
+
+- **Research, launch kit, blog post:** add the label `ai:research`, `ai:marketing` or `ai:content` to an issue that describes what you want (for `ai:marketing`, you can also comment `/ai marketing` on a merged PR). The agent writes one document and opens a PR. Comment `/ai revise` on that PR after leaving review comments to get a new draft.
+- **Support (off by default):** set `support_enabled = true` in `ai-company.toml` and every new issue opened by someone other than you gets labels (bug, question, enhancement, duplicate, needs-info, invalid, good first issue) and a comment with a *suggested* reply for you. Set `support_auto_reply = true` to let it reply to the author directly. Each triage is a small Claude run capped by `[support] max_budget_usd`, and long issues are cut, but on a public repo anyone can open issues, so turn it on deliberately. Comment `/ai triage` on any issue to run it by hand.
+- **QA tester and tech writer** run automatically inside the build pipeline. Turn them off with `qa_enabled = false` or `docs_enabled = false`.
+
+Each role uses your Claude usage. On a Pro plan, consider lighter models for the support, tech writer and growth roles (see `templates/ai-company.toml`).
 
 ### Optional per-repository settings
 

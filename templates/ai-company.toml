@@ -8,6 +8,11 @@
 # owner_login = ""                     # default: the repository owner
 # allowed_triggerers = []              # default: only the owner
 # max_review_rounds = 2
+# qa_enabled = true                    # QA tests user-facing changes in a browser
+# max_qa_rounds = 1                    # times QA bugs go back to the developer
+# docs_enabled = true                  # tech writer updates README, docs, CHANGELOG
+# support_enabled = false              # true: support triages new issues from other people
+# support_auto_reply = false           # true: support replies to the author directly
 # auth_mode = "auto"                   # "auto", "subscription" or "api"
 # api_fallback_on_limit = false        # true: switch to the API key when the subscription limit is hit
 
@@ -22,3 +27,15 @@
 # effort = "xhigh"
 # [reviewer]
 # model = "claude-sonnet-5-5"
+# [qa]
+# model = "claude-sonnet-5-5"
+# [tech_writer]
+# model = "claude-haiku-5-5"
+# [researcher]
+# model = "claude-sonnet-5-5"
+# [marketing]
+# model = "claude-sonnet-5-5"
+# [content_writer]
+# model = "claude-sonnet-5-5"
+# [support]
+# model = "claude-haiku-5-5"

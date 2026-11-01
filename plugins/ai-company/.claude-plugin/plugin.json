@@ -1,7 +1,7 @@
 {
   "name": "ai-company",
   "displayName": "AI Company",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A product team of four agents (Manager, Designer, Developer, Reviewer) plus the skills they use. Works in any project.",
   "author": {
     "name": "code-ravi007",

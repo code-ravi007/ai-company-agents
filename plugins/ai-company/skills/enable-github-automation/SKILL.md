@@ -13,7 +13,7 @@ disable-model-invocation: true
 name: AI company
 on:
   issues:
-    types: [labeled]
+    types: [labeled, opened]
   issue_comment:
     types: [created]
   pull_request_review:

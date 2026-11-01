@@ -35,6 +35,34 @@ CHANGES = {
 }
 
 
+QA_PASS = {"verdict": "pass", "summary": "All flows work", "bugs": [], "screenshots": ["01-home.png"], "not_tested": []}
+QA_FAIL = {
+    "verdict": "fail",
+    "summary": "Button does nothing",
+    "bugs": [{"title": "Greet button dead", "steps": "click Greet", "expected": "Hello shows", "actual": "nothing", "screenshot": ""}],
+    "screenshots": [],
+    "not_tested": [],
+}
+DOCS = {"summary": "README mentions the greeting page", "files_changed": ["README.md", "CHANGELOG.md"]}
+
+
+def qa_writes(output: dict) -> Callable[[Path, str], dict]:
+    def _write(cwd: Path, prompt: str) -> dict:
+        import re
+
+        qa_dir = re.search(r"`([^`]+/qa)/report\.md`", prompt).group(1)
+        (cwd / qa_dir).mkdir(parents=True, exist_ok=True)
+        (cwd / qa_dir / "report.md").write_text(f"# QA\n{output['verdict']}\n")
+        return output
+
+    return _write
+
+
+def writer_writes(cwd: Path, prompt: str) -> dict:
+    (cwd / "CHANGELOG.md").write_text("## [Unreleased]\n- Greeting page\n")
+    return DOCS
+
+
 def git(cwd: Path, *args: str) -> str:
     return subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True).stdout
 
@@ -175,4 +203,4 @@ class FakeGitHub:
         self.review_requests.append((n, login))
 
 
-__all__ = ["SPEC", "DEV", "APPROVE", "CHANGES", "FakeRunner", "FakeGitHub", "designer_writes", "developer_writes", "git", "UsageLimitPause"]
+__all__ = ["SPEC", "DEV", "APPROVE", "CHANGES", "QA_PASS", "QA_FAIL", "DOCS", "qa_writes", "writer_writes", "FakeRunner", "FakeGitHub", "designer_writes", "developer_writes", "git", "UsageLimitPause"]

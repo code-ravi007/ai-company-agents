@@ -1,6 +1,6 @@
 ---
 name: build-feature
-description: Run the whole AI product team on an idea in the current project - Manager writes the spec, Designer the design, Developer implements, Reviewer checks, looping until approved - then offer to commit and open a pull request. Use when the user asks the team to build, add or create a feature.
+description: Run the whole AI product team on an idea in the current project - Manager writes the spec, Designer the design, Developer implements, Reviewer checks, QA tests it in a browser, Tech writer updates the docs - then offer to commit and open a pull request. Use when the user asks the team to build, add or create a feature.
 argument-hint: <idea or issue URL/number>
 ---
 
@@ -8,7 +8,7 @@ argument-hint: <idea or issue URL/number>
 
 Request: $ARGUMENTS
 
-You coordinate four specialist subagents from this plugin: `manager`, `designer`, `developer` and `reviewer`. You do not write the spec, design or code yourself; you hand work between them, keep the human informed, and own git.
+You coordinate specialist subagents from this plugin: `manager`, `designer`, `developer`, `reviewer`, `qa` and `tech-writer`. You do not write the spec, design or code yourself; you hand work between them, keep the human informed, and own git.
 
 ## 0. Prepare
 
@@ -40,12 +40,21 @@ Repeat at most 3 rounds:
 
 If the reviewer still requests changes after 3 rounds, stop and tell the user what is unresolved.
 
-## 5. Hand over
+## 5. QA (qa, only for user-facing changes)
+
+If there is a design (the change is user-facing), delegate to the **qa** subagent with the spec and design paths and tell it to write `docs/ai-company/<slug>/qa/report.md` with screenshots in the same folder. If the verdict is `fail`, give its bugs to the **developer**, then run the reviewer and QA again (at most 2 QA rounds).
+
+## 6. Docs (tech-writer)
+
+Delegate to the **tech-writer** subagent with the spec path and the base branch, and ask it to update the README, docs and `CHANGELOG.md` for this change.
+
+## 7. Hand over
 
 Tell the user, briefly:
 - what was built and the files changed,
 - the test command and result,
 - the reviewer's verdict and any suggestions,
+- the QA verdict and the screenshots folder (if QA ran), and the docs that changed,
 - anything that needs a manual check (for example, a visual check in a browser).
 
 Then **ask** whether to commit and open a pull request. Only after the user says yes:

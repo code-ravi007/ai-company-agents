@@ -4,6 +4,8 @@
     ai-company idea --local "Add a dark mode toggle"   # no GitHub: branch + commit only
     ai-company issue 12                          # build from issue #12
     ai-company revise 34                         # address owner feedback on PR #34
+    ai-company task research 12                  # research brief / launch kit / post from #12
+    ai-company triage 15                         # support triage of issue #15
     ai-company resume                            # resume runs paused by the usage limit
     ai-company event                             # dispatch a GitHub Actions event
 """
@@ -22,7 +24,7 @@ from pathlib import Path
 from ai_company.config import Config, load_config
 from ai_company.credentials import Credentials
 from ai_company.github import Git, GitHub, take_token
-from ai_company.pipeline import Pipeline
+from ai_company.pipeline import TASK_LABELS, Pipeline
 from ai_company.runner import SdkRunner
 
 log = logging.getLogger("ai_company")
@@ -64,6 +66,10 @@ def _fill_identities(config: Config, github: GitHub, repo: str) -> Config:
     return replace(config, **updates)
 
 
+# `/ai <command>` comments that start a document task.
+TASK_COMMANDS = {"research": "researcher", "marketing": "marketing", "content": "content-writer"}
+
+
 def _dispatch_event(args: argparse.Namespace) -> int:
     """Turn a GitHub Actions event into a pipeline call."""
     name = os.environ.get("GITHUB_EVENT_NAME", "")
@@ -88,20 +94,38 @@ def _dispatch_event(args: argparse.Namespace) -> int:
             asyncio.run(pipeline.resume_paused())
         return 0
 
+    # New issues from people outside the team go to the support agent. It is
+    # read-only and can only add a fixed set of labels and one comment.
+    if name == "issues" and event.get("action") == "opened":
+        config = pipeline.config
+        if config.support_enabled and actor not in allowed and actor != config.git_author_name and not actor.endswith("[bot]"):
+            asyncio.run(pipeline.triage_issue(event["issue"]["number"]))
+        else:
+            log.info("New issue from %s needs no triage.", actor)
+        return 0
+
     if actor not in allowed:
         log.warning("Ignoring %s event from %s (not in allowed_triggerers).", name, actor)
         return 0
 
-    if name == "issues" and event.get("label", {}).get("name") == "ai:build":
+    label = event.get("label", {}).get("name") if name == "issues" else None
+    if label == "ai:build":
         asyncio.run(pipeline.run_issue(event["issue"]["number"]))
+    elif label in TASK_LABELS:
+        asyncio.run(pipeline.run_task(TASK_LABELS[label], event["issue"]["number"]))
     elif name == "issue_comment":
         body = (event.get("comment", {}).get("body") or "").strip()
         number = event["issue"]["number"]
         is_pr = "pull_request" in event["issue"]
-        if body.startswith("/ai revise") and is_pr:
+        command = body.split()[1] if body.startswith("/ai ") and len(body.split()) > 1 else ""
+        if command == "revise" and is_pr:
             asyncio.run(pipeline.revise_pr(number))
-        elif body.startswith("/ai build") and not is_pr:
+        elif command == "build" and not is_pr:
             asyncio.run(pipeline.run_issue(number))
+        elif command in TASK_COMMANDS:
+            asyncio.run(pipeline.run_task(TASK_COMMANDS[command], number))
+        elif command == "triage" and not is_pr:
+            asyncio.run(pipeline.triage_issue(number))
         else:
             log.info("Comment is not an /ai command; nothing to do.")
     elif name == "pull_request_review" and (event.get("review", {}).get("body") or "").strip().startswith("/ai revise"):
@@ -126,6 +150,11 @@ def main(argv: list[str] | None = None) -> int:
     p_issue.add_argument("number", type=int)
     p_rev = sub.add_parser("revise", help="Address the owner's feedback on a PR.")
     p_rev.add_argument("number", type=int)
+    p_task = sub.add_parser("task", help="Write a research brief, launch kit or post from an issue or PR.")
+    p_task.add_argument("kind", choices=sorted(TASK_COMMANDS))
+    p_task.add_argument("number", type=int)
+    p_tri = sub.add_parser("triage", help="Run the support agent on an issue.")
+    p_tri.add_argument("number", type=int)
     sub.add_parser("resume", help="Resume runs paused by the usage limit.")
     sub.add_parser("event", help="Handle the current GitHub Actions event.")
 
@@ -141,6 +170,12 @@ def main(argv: list[str] | None = None) -> int:
         state = asyncio.run(pipeline.run_issue(args.number))
     elif args.command == "revise":
         state = asyncio.run(pipeline.revise_pr(args.number))
+    elif args.command == "task":
+        state = asyncio.run(pipeline.run_task(TASK_COMMANDS[args.kind], args.number))
+    elif args.command == "triage":
+        triage = asyncio.run(pipeline.triage_issue(args.number))
+        print(json.dumps(triage, indent=2))
+        return 0
     else:
         for state in asyncio.run(pipeline.resume_paused()):
             print(f"#{state.issue}: {state.stage}")
