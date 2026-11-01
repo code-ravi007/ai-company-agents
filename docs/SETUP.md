@@ -56,6 +56,15 @@ Merge that PR and the team is live in that repository. Personal GitHub accounts 
 
 **Manual alternative:** copy [templates/ai-company.yml](../templates/ai-company.yml) and [templates/claude-review.yml](../templates/claude-review.yml) to `.github/workflows/` and add the secrets under **Settings → Secrets and variables → Actions**. Inside Claude Code, `/ai-company:enable-github-automation` prepares the files for you.
 
+### If ai-company-agents is private
+
+GitHub only lets a private repository's workflows be used by other **private** repositories owned by the same account. So while ai-company-agents is private:
+
+- In ai-company-agents, set **Settings → Actions → General → Access** to "Accessible from repositories owned by the user".
+- The repositories that use the team must be private too. A public one fails at once with no jobs. Making ai-company-agents public removes this limit; it holds no secrets.
+
+The team's code is fetched with `AI_COMPANY_GITHUB_TOKEN`, so that token must be able to read ai-company-agents.
+
 ### Repositories owned by another account
 
 If a repository belongs to a different account, set `AI_COMPANY_BOT=code-ravi007` and run the script signed in as that repository's owner: it then also invites `code-ravi007` as a collaborator and accepts the invite. Fine-grained tokens can't reach another personal account's repositories, so in that case the token must be a classic token with only the `repo` scope.
